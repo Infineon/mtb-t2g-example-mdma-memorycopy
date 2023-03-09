@@ -9,7 +9,7 @@ The device used in this code example (CE) is:
 
 ## Board
 The board used for testing is:
-- TRAVEO™ T2G evaluation kit (`KIT_T2G-B-H_EVK`, `KIT_T2G_B-H_LITE`)
+- TRAVEO™ T2G evaluation kit (`KIT_T2G-B-H_EVK`, `KIT_T2G-B-H_LITE`)
 
 ## Scope of work
 This code example demonstrates the transmission of data from Code Flash to SRAM by M-DMA. M-DMA transfer is initiated using software triggers.
