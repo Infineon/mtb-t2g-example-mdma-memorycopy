@@ -148,12 +148,18 @@ int main(void)
     cyhal_wdt_t wdtObj;
 
     /* Clear watchdog timer so that it doesn't trigger a reset */
-    CY_ASSERT(cyhal_wdt_init(&wdtObj, cyhal_wdt_get_max_timeout_ms()) == CY_RSLT_SUCCESS);
+    if (cyhal_wdt_init(&wdtObj, cyhal_wdt_get_max_timeout_ms()) != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(false);
+    }
     cyhal_wdt_free(&wdtObj);
 #endif /* #if defined (CY_DEVICE_SECURE) */
 
     /* Initialize the device and board peripherals */
-    CY_ASSERT(cybsp_init() == CY_RSLT_SUCCESS);
+    if (cybsp_init() != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(false);
+    }
 
     /* Enable global interrupts */
     __enable_irq();
@@ -185,10 +191,16 @@ int main(void)
     MDMA_Descriptor_0_config.dstAddress = (void *)au8DestBuffer;
 
     /* Initialize the M-DMA descriptor */
-    CY_ASSERT(Cy_DMAC_Descriptor_Init(&MDMA_Descriptor_0, &MDMA_Descriptor_0_config) == CY_DMAC_SUCCESS);
+    if (Cy_DMAC_Descriptor_Init(&MDMA_Descriptor_0, &MDMA_Descriptor_0_config) != CY_DMAC_SUCCESS)
+    {
+        CY_ASSERT(false);
+    }
 
     /* Initialize the M-DMA channel */
-    CY_ASSERT(Cy_DMAC_Channel_Init(DMAC, 0UL, &MDMA_channelConfig) == CY_DMAC_SUCCESS);
+    if (Cy_DMAC_Channel_Init(DMAC, 0UL, &MDMA_channelConfig) != CY_DMAC_SUCCESS)
+    {
+        CY_ASSERT(false);
+    }
     Cy_DMAC_Channel_SetPriority(DMAC, 0UL, 0UL);
     Cy_DMAC_Channel_SetInterruptMask(DMAC, 0UL, CY_DMAC_INTR_COMPLETION);
 
@@ -196,7 +208,10 @@ int main(void)
     Cy_DMAC_Enable(DMAC);
 
     /* Interrupt Initialization */
-    CY_ASSERT(Cy_SysInt_Init(&IRQ_CFG, HandleDMACIntr) == CY_SYSINT_SUCCESS);
+    if (Cy_SysInt_Init(&IRQ_CFG, HandleDMACIntr) != CY_SYSINT_SUCCESS)
+    {
+        CY_ASSERT(false);
+    }
     /* Enable the Interrupt */
     NVIC_EnableIRQ(NvicMux4_IRQn);
 
@@ -227,7 +242,10 @@ int main(void)
         g_isComplete = false;
 
         /* SW Trigger start */
-        CY_ASSERT(Cy_TrigMux_SwTrigger(DMAC_SW_TRIG, CY_TRIGGER_TWO_CYCLES) == CY_TRIGMUX_SUCCESS);
+        if (Cy_TrigMux_SwTrigger(DMAC_SW_TRIG, CY_TRIGGER_TWO_CYCLES) != CY_TRIGMUX_SUCCESS)
+        {
+            CY_ASSERT(false);
+        }
 
         /* wait for DMA completion */
         while (g_isComplete == false)
@@ -239,7 +257,10 @@ int main(void)
         printf("\r\n");
 
         /* Compare source and destination buffers */
-        CY_ASSERT(memcmp(SRC_BUFFER, au8DestBuffer, BUFFER_SIZE) == 0);
+        if (memcmp(SRC_BUFFER, au8DestBuffer, BUFFER_SIZE) != 0)
+        {
+            CY_ASSERT(false);
+        }
         
         /* Print out the result of memory copy*/
         printf("**************** Source(CODE FLASH): ****************\r\n");

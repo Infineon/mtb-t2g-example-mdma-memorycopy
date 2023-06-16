@@ -48,7 +48,7 @@ TARGET=APP_KIT_T2G-B-H_EVK
 #
 # If APPNAME is edited, ensure to update or regenerate launch
 # configurations for your IDE.
-APPNAME=mtb-example-pdl-xmc7000-uart-transmit-receive-dma
+APPNAME=mtb-t2g-example-mdma-memorycopy
 
 # Name of toolchain to use. Options include:
 #
