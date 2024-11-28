@@ -1,6 +1,6 @@
 /**********************************************************************************************************************
  * \file main.c
- * \copyright Copyright (C) Infineon Technologies AG 2019
+ * \copyright Copyright (C) Infineon Technologies AG 2024
  *
  * Use of this file is subject to the terms of use agreed between (i) you or the company in which ordinary course of
  * business you are acting and (ii) Infineon Technologies AG or its licensees. If and as long as no such terms of use
@@ -28,10 +28,8 @@
 /*********************************************************************************************************************/
 /*-----------------------------------------------------Includes------------------------------------------------------*/
 /*********************************************************************************************************************/
-#include "cy_dmac.h"
-#include "cyhal.h"
 #include "cybsp.h"
-#include "cycfg_dmas.h"
+#include "cy_pdl.h"
 #include "cy_retarget_io.h"
 
 /*********************************************************************************************************************/
@@ -39,7 +37,7 @@
 /*********************************************************************************************************************/
 #define BUFFER_SIZE  (36ul)
 #define DMAC_SW_TRIG (TRIG_OUT_MUX_3_MDMA_TR_IN0)
-#define DMAC_INTR (cpuss_interrupts_dmac_0_IRQn)
+#define DMAC_INTR (MDMA_IRQ)
 #define GPIO_INTERRUPT_PRIORITY (7u)
 #define DELAY_MS (1)
 
@@ -57,8 +55,14 @@ static bool g_isInterrupt;
 /* DMAC Interrupt configuration structure */
 const cy_stc_sysint_t IRQ_CFG =
 {
-    .intrSrc = ((NvicMux4_IRQn << 16) | DMAC_INTR),
+    .intrSrc = ((NvicMux4_IRQn << CY_SYSINT_INTRSRC_MUXIRQ_SHIFT) | DMAC_INTR),
     .intrPriority = 0UL
+};
+
+const cy_stc_sysint_t BTN_IRQ_CFG =
+{
+    .intrSrc = ((NvicMux3_IRQn << CY_SYSINT_INTRSRC_MUXIRQ_SHIFT) | CYBSP_USER_BTN_IRQ),
+    .intrPriority = GPIO_INTERRUPT_PRIORITY
 };
 
 /* Data to be transferred */
@@ -76,7 +80,7 @@ const static  uint8_t    SRC_BUFFER[BUFFER_SIZE] = {0x00,0x01,0x02,0x03,0x04,0x0
 void HandleDMACIntr(void);
 
 /* GPIO Handler */
-static void HandleGPIOIntr(void *handlerArg, cyhal_gpio_event_t event);
+void HandleGPIOIntr(void);
 
 /*********************************************************************************************************************/
 /*---------------------------------------------Function Implementations----------------------------------------------*/
@@ -95,11 +99,11 @@ void HandleDMACIntr(void)
 {
     uint32_t masked;
 
-    masked = Cy_DMAC_Channel_GetInterruptStatusMasked(DMAC, 0UL);
+    masked = Cy_DMAC_Channel_GetInterruptStatusMasked(MDMA_HW, MDMA_CHANNEL);
     if ((masked & CY_DMAC_INTR_COMPLETION) != 0UL)
     {
         /* Clear Complete DMA interrupt flag */
-        Cy_DMAC_Channel_ClearInterrupt(DMAC, 0UL,CY_DMAC_INTR_COMPLETION);
+        Cy_DMAC_Channel_ClearInterrupt(MDMA_HW, MDMA_CHANNEL,CY_DMAC_INTR_COMPLETION);
 
         /* Mark the transmission as complete */
         g_isComplete = true;
@@ -114,13 +118,14 @@ void HandleDMACIntr(void)
  * Function Name: HandleGPIOIntr
  * Summary:
  *   GPIO interrupt handler.
- * Parameters:
- *  void *handlerArg (unused)
- *  cyhal_gpio_event_t (unused)
+ * Parameters: 
+ *   none  
  **********************************************************************************************************************
  */
-static void HandleGPIOIntr(void *handlerArg, cyhal_gpio_event_t event)
+void HandleGPIOIntr(void)
 {
+    Cy_GPIO_ClearInterrupt(CYBSP_USER_BTN_PORT, CYBSP_USER_BTN_NUM);
+   
     g_isInterrupt = true;
 }
 
@@ -141,19 +146,7 @@ static void HandleGPIOIntr(void *handlerArg, cyhal_gpio_event_t event)
  */
 int main(void)
 {
-    cyhal_gpio_callback_data_t gpioBtnCallbackData;
     uint8_t au8DestBuffer[BUFFER_SIZE];
-
-#if defined (CY_DEVICE_SECURE)
-    cyhal_wdt_t wdtObj;
-
-    /* Clear watchdog timer so that it doesn't trigger a reset */
-    if (cyhal_wdt_init(&wdtObj, cyhal_wdt_get_max_timeout_ms()) != CY_RSLT_SUCCESS)
-    {
-        CY_ASSERT(false);
-    }
-    cyhal_wdt_free(&wdtObj);
-#endif /* #if defined (CY_DEVICE_SECURE) */
 
     /* Initialize the device and board peripherals */
     if (cybsp_init() != CY_RSLT_SUCCESS)
@@ -165,15 +158,17 @@ int main(void)
     __enable_irq();
 
     /* Initialize retarget-io to use the debug UART port */
-    cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX, CY_RETARGET_IO_BAUDRATE);
+    Cy_SCB_UART_Init(UART_HW, &UART_config, NULL);
+    Cy_SCB_UART_Enable(UART_HW);
+    cy_retarget_io_init(UART_HW);
 
     /* Initialize the user button */
-    cyhal_gpio_init(CYBSP_USER_BTN, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, CYBSP_BTN_OFF);
+    Cy_GPIO_Pin_Init(CYBSP_USER_BTN_PORT, CYBSP_USER_BTN_NUM, &CYBSP_USER_BTN1_config);
 
     /* Configure GPIO interrupt */
-    gpioBtnCallbackData.callback = HandleGPIOIntr;
-    cyhal_gpio_register_callback(CYBSP_USER_BTN, &gpioBtnCallbackData);
-    cyhal_gpio_enable_event(CYBSP_USER_BTN, CYHAL_GPIO_IRQ_FALL, GPIO_INTERRUPT_PRIORITY, true);
+    Cy_SysInt_Init(&BTN_IRQ_CFG, &HandleGPIOIntr);
+    NVIC_ClearPendingIRQ((IRQn_Type)BTN_IRQ_CFG.intrSrc);
+    NVIC_EnableIRQ((IRQn_Type) NvicMux3_IRQn);
 
     /* \x1b[2J\x1b[;H - ANSI ESC sequence for clear screen */
     printf("\x1b[2J\x1b[;H");
@@ -182,8 +177,8 @@ int main(void)
     printf("- M-DMA memory copy Transfer Initialize & Enable  \r\n");
 
     /* Disable M-DMA */
-    Cy_DMAC_Disable(DMAC);
-    Cy_DMAC_Channel_DeInit(DMAC, 0UL);
+    Cy_DMAC_Disable(MDMA_HW);
+    Cy_DMAC_Channel_DeInit(MDMA_HW, MDMA_CHANNEL);
  
     /* Set the Source and Destination address */
     /* Source data are located in Code Flash */
@@ -197,15 +192,15 @@ int main(void)
     }
 
     /* Initialize the M-DMA channel */
-    if (Cy_DMAC_Channel_Init(DMAC, 0UL, &MDMA_channelConfig) != CY_DMAC_SUCCESS)
+    if (Cy_DMAC_Channel_Init(MDMA_HW, MDMA_CHANNEL, &MDMA_channelConfig) != CY_DMAC_SUCCESS)
     {
         CY_ASSERT(false);
     }
-    Cy_DMAC_Channel_SetPriority(DMAC, 0UL, 0UL);
-    Cy_DMAC_Channel_SetInterruptMask(DMAC, 0UL, CY_DMAC_INTR_COMPLETION);
+    Cy_DMAC_Channel_SetPriority(MDMA_HW, MDMA_CHANNEL, 0UL);
+    Cy_DMAC_Channel_SetInterruptMask(MDMA_HW, MDMA_CHANNEL, CY_DMAC_INTR_COMPLETION);
 
     /* Enable the M-DMA */
-    Cy_DMAC_Enable(DMAC);
+    Cy_DMAC_Enable(MDMA_HW);
 
     /* Interrupt Initialization */
     if (Cy_SysInt_Init(&IRQ_CFG, HandleDMACIntr) != CY_SYSINT_SUCCESS)
@@ -228,15 +223,15 @@ int main(void)
         /* Wait for interrupt */
         while (g_isInterrupt == false)
         {
-            cyhal_system_delay_ms(DELAY_MS);
+            Cy_SysLib_Delay(DELAY_MS);
         }
 
         /* Clear destination memory */
         memset(au8DestBuffer, 0, sizeof(au8DestBuffer));
 
         /* Set up the channel */
-        Cy_DMAC_Channel_SetDescriptor(DMAC, 0UL, &MDMA_Descriptor_0);
-        Cy_DMAC_Channel_Enable(DMAC, 0UL);
+        Cy_DMAC_Channel_SetDescriptor(MDMA_HW, MDMA_CHANNEL, &MDMA_Descriptor_0);
+        Cy_DMAC_Channel_Enable(MDMA_HW, MDMA_CHANNEL);
 
         /* Clear the transfer completion flag */
         g_isComplete = false;
@@ -250,7 +245,7 @@ int main(void)
         /* wait for DMA completion */
         while (g_isComplete == false)
         {
-            cyhal_system_delay_ms(DELAY_MS);
+            Cy_SysLib_Delay(DELAY_MS);
         }
 
         printf("- DMA transfer is completed. \r\n");
