@@ -1,6 +1,6 @@
 /**********************************************************************************************************************
  * \file main.c
- * \copyright Copyright (C) Infineon Technologies AG 2024
+ * \copyright Copyright (C) Infineon Technologies AG 2019
  *
  * Use of this file is subject to the terms of use agreed between (i) you or the company in which ordinary course of
  * business you are acting and (ii) Infineon Technologies AG or its licensees. If and as long as no such terms of use
@@ -157,13 +157,13 @@ int main(void)
     /* Enable global interrupts */
     __enable_irq();
 
+    SCB_DisableICache();
+    SCB_DisableDCache();
+
     /* Initialize retarget-io to use the debug UART port */
     Cy_SCB_UART_Init(UART_HW, &UART_config, NULL);
     Cy_SCB_UART_Enable(UART_HW);
     cy_retarget_io_init(UART_HW);
-
-    /* Initialize the user button */
-    Cy_GPIO_Pin_Init(CYBSP_USER_BTN_PORT, CYBSP_USER_BTN_NUM, &CYBSP_USER_BTN1_config);
 
     /* Configure GPIO interrupt */
     Cy_SysInt_Init(&BTN_IRQ_CFG, &HandleGPIOIntr);
