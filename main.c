@@ -31,6 +31,7 @@
 #include "cybsp.h"
 #include "cy_pdl.h"
 #include "cy_retarget_io.h"
+#include "mtb_hal.h"
 
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
@@ -48,6 +49,10 @@
 static bool g_isComplete;
 /* A flag when button interrupt is occurred, then it will change to true */
 static bool g_isInterrupt;
+
+/* For the Retarget -IO (Debug UART) usage */
+static cy_stc_scb_uart_context_t    UART_context;           /** UART context */
+static mtb_hal_uart_t               UART_hal_obj;           /** Debug UART HAL object  */
 
 /*********************************************************************************************************************/
 /*--------------------------------------------Private Variables/Constants--------------------------------------------*/
@@ -146,6 +151,8 @@ void HandleGPIOIntr(void)
  */
 int main(void)
 {
+    cy_rslt_t result;
+
     uint8_t au8DestBuffer[BUFFER_SIZE];
 
     /* Initialize the device and board peripherals */
@@ -160,10 +167,33 @@ int main(void)
     SCB_DisableICache();
     SCB_DisableDCache();
 
-    /* Initialize retarget-io to use the debug UART port */
-    Cy_SCB_UART_Init(UART_HW, &UART_config, NULL);
+    /* Debug UART init */
+    result = (cy_rslt_t)Cy_SCB_UART_Init(UART_HW, &UART_config, &UART_context);
+
+    /* UART init failed. Stop program execution */
+    if (result != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
+
     Cy_SCB_UART_Enable(UART_HW);
-    cy_retarget_io_init(UART_HW);
+
+    /* Setup the HAL UART */
+    result = mtb_hal_uart_setup(&UART_hal_obj, &UART_hal_config, &UART_context, NULL);
+
+    /* HAL UART init failed. Stop program execution */
+    if (result != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
+
+    result = cy_retarget_io_init(&UART_hal_obj);
+
+    /* HAL retarget_io init failed. Stop program execution */
+    if (result != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
 
     /* Configure GPIO interrupt */
     Cy_SysInt_Init(&BTN_IRQ_CFG, &HandleGPIOIntr);
